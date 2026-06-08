@@ -4,9 +4,9 @@
 // ════════════════════════════════════════════════════════
 
 const KEYS = {
-  ANIME:    'adt_anime',    // { [slug]: AnimeRecord }
-  SCHEDULE: 'adt_sched',   // { weekKey: [TimetableEntry] }
-  SETTINGS: 'adt_settings' // { token, tz }
+  ANIME:    'adt_anime',
+  SCHEDULE: 'adt_sched',
+  SETTINGS: 'adt_settings'
 };
 
 function loadData(key) {
@@ -26,24 +26,6 @@ function saveData(key, value) {
   }
 }
 
-// AnimeRecord shape:
-// {
-//   slug: string,            // animeschedule route slug
-//   title: string,           // English title
-//   titleRomaji: string,
-//   totalEpisodes: number,
-//   dubDay: string,          // day of week dub airs
-//   dubTime: string,         // ISO string of next dub ep
-//   savedAt: number,         // timestamp
-//   cast: [                  // array from extension scrapes
-//     {
-//       character: string,
-//       va: string,
-//       tier: string         // 'Main'|'Secondary'|'Minor'|'Additional'
-//     }
-//   ]
-// }
-
 function getAnimeMap() {
   return loadData(KEYS.ANIME) || {};
 }
@@ -58,15 +40,11 @@ function getSettings() {
 
 function saveSettings_() {
   const token = document.getElementById('api-token-input').value.trim();
-  const tz    = document.getElementById('tz-input').value.trim() || 'Europe/London';
+  const tz    = document.getElementById('tz-input').value.trim() || 'Australia/Sydney';
   saveData(KEYS.SETTINGS, { token, tz });
   closeSettings();
   showToast('Settings saved');
 }
-
-// ════════════════════════════════════════════════════════
-// TAB SWITCHING
-// ════════════════════════════════════════════════════════
 
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
@@ -75,10 +53,6 @@ function switchTab(name) {
   if (name === 'vas')   renderVAs();
 }
 
-// ════════════════════════════════════════════════════════
-// ANIMESCHEDULE API
-// ════════════════════════════════════════════════════════
-
 async function syncSchedule() {
   const settings = getSettings();
   if (!settings.token) {
@@ -86,49 +60,36 @@ async function syncSchedule() {
     showToast('Add your API token first');
     return;
   }
-
   const btn = document.getElementById('sync-btn');
   const statusEl = document.getElementById('sync-status');
   btn.disabled = true;
   btn.textContent = 'Syncing…';
   statusEl.textContent = '';
-
   try {
-    // Call our Netlify proxy function which forwards to AnimeSchedule server-side
-    // This avoids the browser CORS restriction on animeschedule.net
     const tz  = encodeURIComponent(settings.tz || 'Australia/Sydney');
     const url = `/.netlify/functions/timetable?airType=dub&tz=${tz}`;
-
     const resp = await fetch(url, {
       headers: { 'Authorization': `Bearer ${settings.token}` }
     });
-
     if (!resp.ok) {
       const body = await resp.text();
       throw new Error(`API error ${resp.status}: ${body}`);
     }
-
     const data = await resp.json();
-
     if (!Array.isArray(data)) {
       throw new Error('Unexpected API response format');
     }
-
-    // Store the schedule keyed by current week
     const weekKey = getCurrentWeekKey();
     const schedMap = loadData(KEYS.SCHEDULE) || {};
     schedMap[weekKey] = data;
-    // Keep only last 4 weeks to save space
     const allKeys = Object.keys(schedMap).sort();
     while (allKeys.length > 4) {
       delete schedMap[allKeys.shift()];
     }
     saveData(KEYS.SCHEDULE, schedMap);
-
     statusEl.textContent = `${data.length} entries`;
     renderCalendar(data);
     showToast(`Loaded ${data.length} dub episodes`);
-
   } catch(err) {
     showToast('Sync failed: ' + err.message);
     statusEl.textContent = 'Error';
@@ -143,12 +104,8 @@ function getCurrentWeekKey() {
   const now = new Date();
   const jan1 = new Date(now.getFullYear(), 0, 1);
   const week = Math.ceil(((now - jan1) / 86400000 + jan1.getDay() + 1) / 7);
-  return `${now.getFullYear()}-W${String(week).padStart(2, '0')}`;
+  return `${now.getFullYear()}-W${String(week).padStart(2, '00')}`;
 }
-
-// ════════════════════════════════════════════════════════
-// CALENDAR RENDER
-// ════════════════════════════════════════════════════════
 
 function renderCalendar(entries) {
   const container = document.getElementById('calendar-content');
@@ -156,14 +113,10 @@ function renderCalendar(entries) {
     container.innerHTML = `<div class="empty-state"><div class="icon">📅</div><h3>No dubs this week</h3><p>No dubbed episodes scheduled for this week.</p></div>`;
     return;
   }
-
   const animeMap = getAnimeMap();
   const todayStr = getDayString(new Date());
-
-  // Group by day of week
   const days = {};
   const dayOrder = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-
   for (const entry of entries) {
     const epDate = new Date(entry.EpisodeDate || entry.episodeDate);
     if (isNaN(epDate.getTime())) continue;
@@ -171,33 +124,25 @@ function renderCalendar(entries) {
     if (!days[dayName]) days[dayName] = [];
     days[dayName].push({ entry, epDate });
   }
-
-  // Sort days starting from today
   const todayIdx = dayOrder.indexOf(todayStr);
   const sortedDays = [
     ...dayOrder.slice(todayIdx),
     ...dayOrder.slice(0, todayIdx)
   ].filter(d => days[d]);
-
   let html = '';
   for (const dayName of sortedDays) {
     const isToday = dayName === todayStr;
     html += `<div class="day-group">`;
     html += `<div class="day-label${isToday ? ' today' : ''}">${isToday ? 'TODAY — ' : ''}${dayName}</div>`;
-
-    // Sort by time within day
     days[dayName].sort((a, b) => a.epDate - b.epDate);
-
     for (const { entry, epDate } of days[dayName]) {
       const slug  = entry.Route || entry.route || '';
       const title = entry.English || entry.english || entry.Title || entry.title || entry.Romaji || slug;
       const epNum = entry.EpisodeNumber || entry.episodeNumber || '?';
       const timeStr = epDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const isSaved = !!animeMap[slug];
-      // Store data safely in a data attribute using base64 encoding to avoid any quote issues
       const dataObj = { slug, title, epNum, epDate: epDate.toISOString() };
       const dataB64 = btoa(unescape(encodeURIComponent(JSON.stringify(dataObj))));
-
       html += `
         <div class="cal-card${isSaved ? ' saved' : ''}" id="cal-${escHtml(slug)}">
           <div class="ep-time">${timeStr}</div>
@@ -212,7 +157,6 @@ function renderCalendar(entries) {
     }
     html += `</div>`;
   }
-
   container.innerHTML = html;
 }
 
@@ -229,8 +173,7 @@ function toggleSaveAnime(event, dataB64) {
     showToast('Error reading anime data');
     return;
   }
-  const map  = getAnimeMap();
-
+  const map = getAnimeMap();
   if (map[info.slug]) {
     delete map[info.slug];
     showToast(`Removed "${info.title}"`);
@@ -246,10 +189,7 @@ function toggleSaveAnime(event, dataB64) {
     };
     showToast(`Saved "${info.title}"`);
   }
-
   saveAnimeMap(map);
-
-  // Update the card in place without full re-render
   const card = document.getElementById('cal-' + info.slug);
   if (card) {
     const isSaved = !!map[info.slug];
@@ -257,10 +197,6 @@ function toggleSaveAnime(event, dataB64) {
     card.querySelector('.save-btn').textContent = isSaved ? '✓ Saved' : '+ Save';
   }
 }
-
-// ════════════════════════════════════════════════════════
-// ANIME TAB RENDER
-// ════════════════════════════════════════════════════════
 
 let animeFilter = '';
 
@@ -273,7 +209,6 @@ function renderAnime() {
   const container = document.getElementById('anime-content');
   const map = getAnimeMap();
   let entries = Object.values(map);
-
   if (animeFilter) {
     entries = entries.filter(a => {
       if (a.title.toLowerCase().includes(animeFilter)) return true;
@@ -283,9 +218,7 @@ function renderAnime() {
       );
     });
   }
-
   entries.sort((a, b) => b.savedAt - a.savedAt);
-
   if (entries.length === 0) {
     if (animeFilter) {
       container.innerHTML = `<div class="empty-state"><div class="icon">🔍</div><h3>No results</h3><p>No saved anime match "${escHtml(animeFilter)}".</p></div>`;
@@ -294,7 +227,6 @@ function renderAnime() {
     }
     return;
   }
-
   const html = entries.map(anime => buildAnimeCard(anime)).join('');
   container.innerHTML = html;
 }
@@ -303,15 +235,12 @@ function buildAnimeCard(anime) {
   const cast = anime.cast || [];
   const castCount = cast.length;
   const hasData = castCount > 0;
-
-  // Group cast by tier
   const tiers = { Main: [], Secondary: [], Minor: [], Additional: [] };
   for (const c of cast) {
     const t = c.tier || 'Additional';
     if (tiers[t]) tiers[t].push(c);
     else tiers['Additional'].push(c);
   }
-
   let castHtml = '';
   if (!hasData) {
     castHtml = `<div class="no-cast">No cast data yet. Visit this anime's page on Anime Voice Over in Quetta Browser to import the cast automatically.</div>`;
@@ -330,11 +259,9 @@ function buildAnimeCard(anime) {
       }
     }
   }
-
   const slug = anime.slug || '';
   const castLabel = hasData ? `${castCount} cast` : 'No cast';
   const slugB64 = btoa(unescape(encodeURIComponent(slug)));
-
   return `
     <div class="anime-entry" id="ae-${escHtml(slug)}">
       <div class="anime-entry-header" data-slug="${slugB64}" onclick="toggleAnimeCard(this.dataset.slug)">
@@ -378,17 +305,12 @@ function jumpToVA(vaB64) {
   try {
     vaName = decodeURIComponent(escape(atob(vaB64)));
   } catch(e) {
-    vaName = vaB64; // fallback if not base64
+    vaName = vaB64;
   }
-  // Switch to VA tab and filter to that VA
   switchTab('vas');
   document.getElementById('va-search').value = vaName;
   filterVAs(vaName);
 }
-
-// ════════════════════════════════════════════════════════
-// VOICE ACTORS TAB RENDER
-// ════════════════════════════════════════════════════════
 
 let vaFilter = '';
 
@@ -397,18 +319,12 @@ function filterVAs(val) {
   renderVAs();
 }
 
-// Normalise a VA name for grouping purposes.
-// Removes middle initials, punctuation, and extra spaces so that
-// "Joshua A. Waters", "Joshua Waters", and "Josh Waters" are
-// treated as potentially the same person.
-// The normalisation is: lowercase, strip middle initials (single letter + dot),
-// remove punctuation, collapse spaces.
 function normaliseVAName(name) {
   return name
     .toLowerCase()
-    .replace(/\b[a-z]\.\s*/g, '')   // remove middle initials like "A."
-    .replace(/[^a-z0-9\s]/g, '')    // remove remaining punctuation
-    .replace(/\s+/g, ' ')           // collapse multiple spaces
+    .replace(/\b[a-z]\.\s*/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
@@ -416,21 +332,14 @@ function renderVAs() {
   const container = document.getElementById('vas-content');
   const map = getAnimeMap();
   const allAnime = Object.values(map);
-
-  // Build VA → [{anime, character, tier}] map
-  // Uses normalised name as key to group slight variations together
-  // e.g. "Joshua A. Waters" and "Joshua Waters" → same person
   const vaMap = {};
-
   for (const anime of allAnime) {
     for (const c of (anime.cast || [])) {
       if (!c.va) continue;
       const key = normaliseVAName(c.va);
       if (!vaMap[key]) {
-        // Use the longest/most complete version of the name as display name
         vaMap[key] = { displayName: c.va, roles: [] };
       } else {
-        // Keep whichever name is longer (more complete)
         if (c.va.length > vaMap[key].displayName.length) {
           vaMap[key].displayName = c.va;
         }
@@ -442,20 +351,20 @@ function renderVAs() {
       });
     }
   }
-
   let vas = Object.values(vaMap);
-
+  const NAMED_TIERS = new Set(['Main', 'Secondary', 'Minor']);
+  vas = vas.filter(v =>
+    v.roles.some(r => NAMED_TIERS.has(r.tier) && r.character && r.character.trim() !== '')
+  );
   if (vaFilter) {
-    // Search both VA name and character names
     vas = vas.filter(v => {
       if (v.displayName.toLowerCase().includes(vaFilter)) return true;
-      return v.roles.some(r => r.character.toLowerCase().includes(vaFilter));
+      return v.roles.some(r =>
+        r.character && r.character.toLowerCase().includes(vaFilter)
+      );
     });
   }
-
-  // Sort by number of roles desc, then alpha
   vas.sort((a, b) => b.roles.length - a.roles.length || a.displayName.localeCompare(b.displayName));
-
   if (vas.length === 0) {
     if (vaFilter) {
       container.innerHTML = `<div class="empty-state"><div class="icon">🔍</div><h3>No results</h3><p>No voice actors match "${escHtml(vaFilter)}".</p></div>`;
@@ -464,30 +373,36 @@ function renderVAs() {
     }
     return;
   }
-
   const html = vas.map(va => buildVACard(va)).join('');
   container.innerHTML = html;
 }
 
 function buildVACard(va) {
   const id = 'va-' + slugify(va.displayName);
-  const roleCount = va.roles.length;
-
-  // Sort roles: Main first, then Secondary, then Minor, then Additional; then alpha by anime
   const tierOrder = { Main: 0, Secondary: 1, Minor: 2, Additional: 3 };
   const sorted = [...va.roles].sort((a, b) => {
     const td = (tierOrder[a.tier] || 3) - (tierOrder[b.tier] || 3);
     if (td !== 0) return td;
     return a.animeTitle.localeCompare(b.animeTitle);
   });
-
-  const rolesHtml = sorted.map(r => `
+  const roleCount = sorted.length;
+  const rolesHtml = sorted.map(r => {
+    const hasName = r.character && r.character.trim() !== '';
+    let charCell;
+    if (hasName) {
+      const searchQuery = encodeURIComponent(r.animeTitle + ' ' + r.character);
+      const searchUrl   = `https://www.google.com/search?q=${searchQuery}`;
+      charCell = `<a class="va-role-char va-role-link" href="${searchUrl}" target="_blank" rel="noopener noreferrer">${escHtml(r.character)}</a>`;
+    } else {
+      charCell = `<span class="va-role-char"></span>`;
+    }
+    return `
     <div class="va-role-row">
       <span class="va-role-anime">${escHtml(r.animeTitle)}</span>
-      <span class="va-role-char">${escHtml(r.character)}</span>
+      ${charCell}
       <span class="va-role-tier">${r.tier}</span>
-    </div>`).join('');
-
+    </div>`;
+  }).join('');
   return `
     <div class="va-card" id="${id}">
       <div class="va-card-header" onclick="toggleVACard('${id}')">
@@ -513,12 +428,6 @@ function slugify(str) {
   return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-// ════════════════════════════════════════════════════════
-// EXTENSION MESSAGE LISTENER
-// The Quetta extension's pwa-bridge.js injects data into this
-// page via window.postMessage. We listen for those messages here.
-// ════════════════════════════════════════════════════════
-
 window.addEventListener('message', function(event) {
   if (!event.data || event.data.source !== 'anime-dub-tracker-ext') return;
   handleExtensionMessage(event.data);
@@ -526,25 +435,17 @@ window.addEventListener('message', function(event) {
 
 function handleExtensionMessage(msg) {
   if (!msg || !msg.type) return;
-
   if (msg.type === 'CAST_DATA') {
-    // msg.slug: animeschedule route slug (or title-normalised key)
-    // msg.title: anime title string
-    // msg.cast: [{ character, va, tier }]
     importCastData(msg.slug, msg.title, msg.cast);
   } else if (msg.type === 'SCHEDULE_ENTRY') {
-    // Single anime entry to add/update
     importScheduleEntry(msg.entry);
   }
 }
 
 function importCastData(slug, title, cast) {
   if (!slug || !Array.isArray(cast)) return;
-
   const map = getAnimeMap();
-
   if (!map[slug]) {
-    // Auto-create entry if not yet saved
     map[slug] = {
       slug,
       title:         title || slug,
@@ -555,12 +456,9 @@ function importCastData(slug, title, cast) {
       cast:          []
     };
   }
-
-  // Merge cast: add entries not already present (match on character+va)
   const existing = map[slug].cast || [];
   const existingKeys = new Set(existing.map(c => (c.character + '|||' + c.va).toLowerCase()));
   let added = 0;
-
   for (const entry of cast) {
     if (!entry.character && !entry.va) continue;
     const key = ((entry.character || '') + '|||' + (entry.va || '')).toLowerCase();
@@ -574,19 +472,13 @@ function importCastData(slug, title, cast) {
       added++;
     }
   }
-
   map[slug].cast = existing;
   if (title && !map[slug].title) map[slug].title = title;
-
   saveAnimeMap(map);
-
   const msg = added > 0
     ? `Imported ${added} cast entries for "${map[slug].title}"`
     : `Cast data for "${map[slug].title}" already up to date`;
-
   showToast(msg);
-
-  // Re-render if anime tab is active
   if (document.getElementById('tab-anime').classList.contains('active')) {
     renderAnime();
   }
@@ -613,14 +505,10 @@ function importScheduleEntry(entry) {
   }
 }
 
-// ════════════════════════════════════════════════════════
-// SETTINGS MODAL
-// ════════════════════════════════════════════════════════
-
 function openSettings() {
   const s = getSettings();
   document.getElementById('api-token-input').value = s.token || '';
-  document.getElementById('tz-input').value = s.tz || 'Europe/London';
+  document.getElementById('tz-input').value = s.tz || 'Australia/Sydney';
   document.getElementById('modal-overlay').classList.add('open');
 }
 
@@ -632,10 +520,6 @@ function saveSettings() {
   saveSettings_();
 }
 
-// ════════════════════════════════════════════════════════
-// TOAST
-// ════════════════════════════════════════════════════════
-
 let toastTimer = null;
 function showToast(msg) {
   const el = document.getElementById('toast');
@@ -644,10 +528,6 @@ function showToast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
 }
-
-// ════════════════════════════════════════════════════════
-// HTML ESCAPING
-// ════════════════════════════════════════════════════════
 
 function escHtml(str) {
   return String(str || '')
@@ -664,10 +544,6 @@ function escAttr(str) {
     .replace(/"/g, '\\"');
 }
 
-// ════════════════════════════════════════════════════════
-// SERVICE WORKER REGISTRATION
-// ════════════════════════════════════════════════════════
-
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js')
@@ -675,10 +551,6 @@ if ('serviceWorker' in navigator) {
       .catch(err => console.warn('SW registration failed:', err));
   });
 }
-
-// ════════════════════════════════════════════════════════
-// INIT — load cached schedule on startup
-// ════════════════════════════════════════════════════════
 
 window.addEventListener('DOMContentLoaded', () => {
   attachStaticListeners();
@@ -691,38 +563,23 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ════════════════════════════════════════════════════════
-// STATIC ELEMENT EVENT LISTENERS
-// Replaces all inline onclick/oninput handlers in the HTML.
-// Must run after DOMContentLoaded (already wrapped below).
-// ════════════════════════════════════════════════════════
-
 function attachStaticListeners() {
-  // Header buttons
   document.getElementById('sync-btn').addEventListener('click', syncSchedule);
   document.getElementById('settings-btn').addEventListener('click', openSettings);
-
-  // Tab buttons
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', function() {
       switchTab(this.dataset.tab);
     });
   });
-
-  // Search inputs
   document.getElementById('anime-search').addEventListener('input', function() {
     filterAnime(this.value);
   });
   document.getElementById('va-search').addEventListener('input', function() {
     filterVAs(this.value);
   });
-
-  // Modal overlay — close when tapping outside the modal box
   document.getElementById('modal-overlay').addEventListener('click', function(event) {
     if (event.target === this) closeSettings();
   });
-
-  // Modal buttons
   document.getElementById('modal-cancel').addEventListener('click', closeSettings);
   document.getElementById('modal-save').addEventListener('click', saveSettings);
 }
