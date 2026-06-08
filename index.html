@@ -476,19 +476,19 @@
   <div id="header">
     <h1>🎌 DubTracker</h1>
     <span id="sync-status"></span>
-    <button id="sync-btn" onclick="syncSchedule()">Sync</button>
-    <button id="settings-btn" onclick="openSettings()" title="Settings">⚙️</button>
+    <button id="sync-btn">Sync</button>
+    <button id="settings-btn" title="Settings">⚙️</button>
   </div>
 
   <!-- Tab bar -->
   <div id="tab-bar">
-    <button class="tab-btn active" data-tab="calendar" onclick="switchTab('calendar')">
+    <button class="tab-btn active" data-tab="calendar">
       <span class="icon">📅</span>Calendar
     </button>
-    <button class="tab-btn" data-tab="anime" onclick="switchTab('anime')">
+    <button class="tab-btn" data-tab="anime">
       <span class="icon">📺</span>Anime
     </button>
-    <button class="tab-btn" data-tab="vas" onclick="switchTab('vas')">
+    <button class="tab-btn" data-tab="vas">
       <span class="icon">🎙️</span>Voice Actors
     </button>
   </div>
@@ -510,13 +510,13 @@
     <!-- TAB 2: Anime & Cast -->
     <div id="tab-anime" class="tab-panel">
       <div class="search-bar">
-        <input type="text" id="anime-search" placeholder="Search saved anime…" oninput="filterAnime(this.value)" />
+        <input type="text" id="anime-search" placeholder="Search saved anime…" />
       </div>
       <div id="anime-content">
         <div class="empty-state">
           <div class="icon">📺</div>
           <h3>No anime saved yet</h3>
-          <p>Save anime from the Calendar tab, or visit anime pages in Kiwi Browser with the extension installed to import cast data automatically.</p>
+          <p>Save anime from the Calendar tab, or visit anime pages in Quetta Browser with the extension installed to import cast data automatically.</p>
         </div>
       </div>
     </div>
@@ -524,13 +524,13 @@
     <!-- TAB 3: Voice Actors -->
     <div id="tab-vas" class="tab-panel">
       <div class="search-bar">
-        <input type="text" id="va-search" placeholder="Search voice actors…" oninput="filterVAs(this.value)" />
+        <input type="text" id="va-search" placeholder="Search voice actors…" />
       </div>
       <div id="vas-content">
         <div class="empty-state">
           <div class="icon">🎙️</div>
           <h3>No voice actors yet</h3>
-          <p>Voice actor data is collected automatically when you visit Anime Voice Over or BTVA pages in Kiwi Browser with the extension installed.</p>
+          <p>Voice actor data is collected automatically when you visit Anime Voice Over or BTVA pages in Quetta Browser with the extension installed.</p>
         </div>
       </div>
     </div>
@@ -542,23 +542,24 @@
 <div id="toast"></div>
 
 <!-- Settings Modal -->
-<div id="modal-overlay" onclick="closeSettings(event)">
+<div id="modal-overlay">
   <div id="modal">
     <h2>⚙️ Settings</h2>
     <label>AnimeSchedule API Token</label>
     <input type="text" id="api-token-input" placeholder="Paste your bearer token here" />
     <label>Your timezone (IANA format)</label>
-    <input type="text" id="tz-input" placeholder="e.g. Europe/London, America/New_York" />
+    <input type="text" id="tz-input" placeholder="e.g. Australia/Sydney, America/New_York" />
     <div style="font-size:11px; color:var(--text-dim); margin-bottom:14px;">
       Get a free token at animeschedule.net → your profile → Settings → API.<br>
-      Timezone examples: Europe/London · America/New_York · America/Los_Angeles · Asia/Tokyo
+      Timezone examples: Australia/Sydney · America/New_York · America/Los_Angeles · Asia/Tokyo
     </div>
     <div class="modal-btns">
-      <button id="modal-cancel" onclick="closeSettings()">Cancel</button>
-      <button id="modal-save" onclick="saveSettings()">Save</button>
+      <button id="modal-cancel">Cancel</button>
+      <button id="modal-save">Save</button>
     </div>
   </div>
 </div>
+
 <script src="app.js"></script>
 </body>
 </html>
